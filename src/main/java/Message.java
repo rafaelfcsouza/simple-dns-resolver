@@ -1,8 +1,7 @@
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
 
 public class Message {
     private final Header header;
@@ -13,13 +12,13 @@ public class Message {
         this.question = question;
     }
 
-    public byte[] getBytes() throws IOException {
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
-        dataOutputStream.write(header.getBytes());
-        dataOutputStream.write(question.getBytes());
-        return byteArrayOutputStream.toByteArray();
-
+    public byte[] getBytes()  {
+        final byte[] header = this.header.getBytes();
+        final byte[] question = this.question.getBytes();
+        ByteBuffer messageByteBuffer = ByteBuffer.allocate(header.length + question.length);
+        messageByteBuffer.put(header);
+        messageByteBuffer.put(question);
+        return messageByteBuffer.array();
     }
 
     public static class Header {
@@ -31,24 +30,19 @@ public class Message {
         private final short additionalRecordsCount = 0;
 
         public Header(short id) {
-             this.id = id;
+            this.id = id;
         }
 
-        public byte[] getBytes() throws IOException {
-            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-            DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
+        public byte[] getBytes() {
 
-            ByteBuffer flagsByteBuffer = ByteBuffer.allocate(2).putShort(flags);
-            byte[] flagsByteArray = flagsByteBuffer.array();
-
-            dataOutputStream.writeShort(id);
-            dataOutputStream.write(flagsByteArray);
-            dataOutputStream.writeShort(questionCount);
-            dataOutputStream.writeShort(answerCount);
-            dataOutputStream.writeShort(authorityCount);
-            dataOutputStream.writeShort(additionalRecordsCount);
-
-            return byteArrayOutputStream.toByteArray();
+            ByteBuffer headerByteBuffer = ByteBuffer.allocate(12);
+            headerByteBuffer.putShort(id);
+            headerByteBuffer.putShort(flags);
+            headerByteBuffer.putShort(questionCount);
+            headerByteBuffer.putShort(answerCount);
+            headerByteBuffer.putShort(authorityCount);
+            headerByteBuffer.putShort(additionalRecordsCount);
+            return headerByteBuffer.array();
         }
     }
 
@@ -63,32 +57,30 @@ public class Message {
             this.questionClass = questionClass;
         }
 
-        public byte[] getBytes() throws IOException {
-            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-            DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
+        public byte[] getBytes() {
 
             byte[] domainBytes = getDomainBytes();
-            dataOutputStream.write(domainBytes);
-            dataOutputStream.writeShort(questionType.value);
-            dataOutputStream.writeShort(questionClass.value);
-
-            return byteArrayOutputStream.toByteArray();
+            ByteBuffer questionByteBuffer = ByteBuffer.allocate(domainBytes.length + 4);
+            questionByteBuffer.put(domainBytes);
+            questionByteBuffer.putShort(questionType.value);
+            questionByteBuffer.putShort(questionClass.value);
+            return questionByteBuffer.array();
 
         }
 
-        private byte[] getDomainBytes() throws IOException {
-            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-            DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
+        private byte[] getDomainBytes() {
 
-            String[] domainParts = domain.split("\\.");
-            for (String domainPart : domainParts) {
-                byte[] domainBytes = domainPart.getBytes(StandardCharsets.UTF_8);
-                dataOutputStream.writeByte(domainBytes.length);
-                dataOutputStream.write(domainBytes);
-            }
-            dataOutputStream.writeByte(0);
-
-            return byteArrayOutputStream.toByteArray();
+            List<byte[]> domainParts = Arrays.stream(domain.split("\\."))
+                    .map(part -> part.getBytes(StandardCharsets.UTF_8))
+                    .toList();
+            int domainLength = domainParts.stream().mapToInt(bytes -> bytes.length).sum() + domainParts.size();
+            ByteBuffer domainByteBuffer = ByteBuffer.allocate(domainLength + 1);
+            domainParts.forEach(part -> {
+                domainByteBuffer.put((byte) part.length);
+                domainByteBuffer.put(part);
+            });
+            domainByteBuffer.put((byte) 0);
+            return domainByteBuffer.array();
         }
     }
 }
